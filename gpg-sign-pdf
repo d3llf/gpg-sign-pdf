@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# This is simple hack to embeed GPG clear signature to PDF file.
+#
+# Such signed PDF files can be easily verified by $gpg --verify file.pgp.asc.pdf
+#
+#
+######### How this works?
+#
+# gpg --clearsign substitutes "\n-" with "\n- -", which mess content
+# quite often. Sometimes it's better to substitute "\n-" patterns with
+# something different before clearsign kicks-in. This simple script substitutes
+# such patterns before clearsigning
+# 
+# Please be aware, that this can mess-up contents of your PDF, so try
+# different substitution pattern by flipping bits, and checking if your
+# PDF is still readable, or try to adapt your document before signing.
+# Usually this pattern is used to mark default color of text, so try to
+# change style of "Default" font from "Automatic" to "Black".
+#
+#
+#                                                      d3llf
+
+TOSIGN="$1"
+#ORIG_PAT=0a2d
+S_PAT="2a2d"
+# GPG_KEY="0x0123456789abcdef"
+
+
+# ------------------------------------------------------------------------------------------
+
+if [ -z $TOSIGN ]; then
+ echo "usage: $0 file-to-embeed-signature.pdf [output-filename]"
+ exit 1
+fi
+
+if [ ! -z $2 ]; then
+ SIGNED="$2"
+
+else
+ SIGNED="$(basename -s .pdf $TOSIGN).gpg.asc.pdf"
+
+fi
+
+if [ ! -z $GPG_KEY ]; then
+
+ GPG_KEY="$(gpg -K | grep sec | tail -1 | tr -s " " | cut -f 2 -d" " | cut -f 2 -d/)"
+
+fi
+
+if [ ! $(which xxd) ]; then
+ echo "No xxd found."
+ exit 1
+fi
+
+# ----------
+
+cp $TOSIGN $SIGNED
+
+
+# Substitute "\n-"
+
+SUB_PAT="s/\s0a2d\s/ $S_PAT /g"
+
+xxd $SIGNED > "$SIGNED".xxd
+sed -e "$SUB_PAT" < "$SIGNED".xxd > "$SIGNED".newline.xxd
+xxd -r "$SIGNED".newline.xxd > $SIGNED
+rm "$SIGNED".xxd "$SIGNED".newline.xxd
+
+# Append your public key to pdf
+
+gpg --export -a $GPG_KEY >> $SIGNED
+
+# Clearsign your document
+
+gpg --clearsign $SIGNED
+mv "$SIGNED".asc $SIGNED
